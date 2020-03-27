@@ -1,9 +1,11 @@
 name: Publish distributions to PyPI and TestPyPI
-on: push
+on:
+  push:
+    tags:
+      - "*"
 
 jobs:
   build-and-publish:
-    if: startsWith(github.event.ref, 'refs/tags')
     name: Build and publish distributions to PyPI and TestPyPI
     runs-on: ubuntu-latest
     steps:
@@ -19,7 +21,6 @@ jobs:
       run: >-
         python3 setup.py sdist bdist_wheel
     - name: Publish distribution to Test PyPI
-      if: startsWith(github.event.ref, 'refs/tags')
       uses: pypa/gh-action-pypi-publish@master
       with:
         password: ${{ secrets._PYPI_TEST_ZIGPY_ }}
