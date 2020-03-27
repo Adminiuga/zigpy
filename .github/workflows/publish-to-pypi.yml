@@ -1,5 +1,8 @@
 name: Publish distributions to PyPI and TestPyPI
-on: push
+on:
+  push:
+    branches:
+      - test-master
 
 jobs:
   build-and-publish:
