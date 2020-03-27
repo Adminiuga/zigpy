@@ -19,7 +19,7 @@ jobs:
         python3 setup.py sdist bdist_wheel
     - name: Publish distribution to Test PyPI
       if: startsWith(github.event.ref, 'refs/tags')
-      uses: pypa/gh-action-pypi-publish@test-master
+      uses: pypa/gh-action-pypi-publish@master
       with:
         password: ${{ secrets._PYPI_TEST_ZIGPY_ }}
         repository_url: https://test.pypi.org/legacy/
