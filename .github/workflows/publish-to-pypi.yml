@@ -6,6 +6,7 @@ on:
 
 jobs:
   build-and-publish:
+    if: startsWith(github.event.ref, 'refs/tags')
     name: Build and publish distributions to PyPI and TestPyPI
     runs-on: ubuntu-latest
     steps:
