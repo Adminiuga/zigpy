@@ -252,7 +252,8 @@ class Device(zigpy.util.LocalLogMixin, zigpy.util.ListenableMixin):
             cnt_prefix = "rx_multicast"
         else:
             cnt_prefix = "rx"
-        cnt_suffix = f"_{src_ep:02x}_{cluster:04x}"
+        suffix_ep_cl = f"_{src_ep:02x}_{cluster:04x}"
+        suffix_ep = suffix_ep_cl[:3]
 
         try:
             hdr, args = self.deserialize(src_ep, cluster, message)
@@ -263,8 +264,9 @@ class Device(zigpy.util.LocalLogMixin, zigpy.util.ListenableMixin):
                 cluster,
                 e,
             )
-            name = cnt_prefix + "_deserialize_failure" + cnt_suffix
-            self.counters[name].increment()
+            name = cnt_prefix + "_deserialize_failure"
+            for suffix in ("", suffix_ep, suffix_ep_cl):
+                self.counters[name + suffix].increment()
             return
         except KeyError as e:
             LOGGER.debug(
@@ -276,8 +278,9 @@ class Device(zigpy.util.LocalLogMixin, zigpy.util.ListenableMixin):
                 cluster,
                 e,
             )
-            name = cnt_prefix + "_unknown_ep_or_cluster" + cnt_suffix
-            self.counters[name].increment()
+            name = cnt_prefix + "_unknown_ep_or_cluster"
+            for suffix in ("", suffix_ep, suffix_ep_cl):
+                self.counters[name + suffix].increment()
             return
 
         if hdr.tsn in self._pending and hdr.is_reply:
@@ -292,11 +295,15 @@ class Device(zigpy.util.LocalLogMixin, zigpy.util.ListenableMixin):
                     hdr.tsn,
                 )
             else:
-                self.counters[cnt_prefix + "_reply" + cnt_suffix].increment()
+                name = cnt_prefix + "_reply"
+                for suffix in ("", suffix_ep, suffix_ep_cl):
+                    self.counters[name + suffix].increment()
             finally:
                 return
 
-        self.counters[cnt_prefix + cnt_suffix].increment()
+        for suffix in ("", suffix_ep, suffix_ep_cl):
+            self.counters[cnt_prefix + suffix].increment()
+
         endpoint = self.endpoints[src_ep]
         return endpoint.handle_message(
             profile, cluster, hdr, args, dst_addressing=dst_addressing
