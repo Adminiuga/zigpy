@@ -3,8 +3,9 @@ import binascii
 import enum
 import logging
 import time
-from typing import Dict, Optional, Union
+from typing import Callable, Dict, List, Optional, Union
 
+import zigpy.application.state as app_state
 from zigpy.const import (
     SIG_ENDPOINTS,
     SIG_EP_INPUT,
@@ -18,7 +19,8 @@ from zigpy.const import (
 import zigpy.endpoint
 import zigpy.exceptions
 import zigpy.neighbor
-from zigpy.types import NWK, Addressing, BroadcastAddress, Relays
+from zigpy.types import EUI64, NWK, Addressing, BroadcastAddress, Relays
+from zigpy.typing import ControllerApplicationType, ZDOType
 import zigpy.util
 import zigpy.zcl.foundation as foundation
 import zigpy.zdo as zdo
@@ -44,29 +46,35 @@ class Device(zigpy.util.LocalLogMixin, zigpy.util.ListenableMixin):
 
     manufacturer_id_override = None
 
-    def __init__(self, application, ieee, nwk):
-        self._application = application
-        self._ieee = ieee
-        self._init_handle = None
-        self.nwk = NWK(nwk)
-        self.zdo = zdo.ZDO(self)
+    def __init__(
+        self, application: ControllerApplicationType, ieee: EUI64, nwk: NWK
+    ) -> None:
+        self._application: ControllerApplicationType = application
+        self._ieee: EUI64 = ieee
+        self._init_handle: Optional[asyncio.Task] = None
+        self.nwk: NWK = NWK(nwk)
+        self.zdo: ZDOType = zdo.ZDO(self)
         self.endpoints: Dict[int, Union[zdo.ZDO, zigpy.endpoint.Endpoint]] = {
             0: self.zdo
         }
-        self.lqi = None
-        self.rssi = None
-        self.last_seen = None
-        self.status = Status.NEW
+        counters_id = f"device_{str(ieee)}"
+        self.counters: app_state.Counters = app_state.Counters(
+            counters_id, auto_create=True
+        )
+        application.state.counters[counters_id] = self.counters
+        self.lqi: Optional[int] = None
+        self.rssi: Optional[int] = None
+        self.last_seen: Optional[float] = None
+        self.status: Status = Status.NEW
         self._group_scan_handle: Optional[asyncio.Task] = None
-        self._listeners = {}
-        self._manufacturer = None
-        self._model = None
-        self.node_desc = zdo.types.NodeDescriptor()
-        self.neighbors = zigpy.neighbor.Neighbors(self)
-        self._node_handle = None
-        self._pending = zigpy.util.Requests()
-        self._relays = None
-        self._skip_configuration = False
+        self._listeners: Dict[int, Callable] = {}
+        self._manufacturer: Optional[str] = None
+        self._model: Optional[str] = None
+        self.node_desc: zdo.types.NodeDescriptor = zdo.types.NodeDescriptor()
+        self.neighbors: zigpy.neighbor.Neighbors = zigpy.neighbor.Neighbors(self)
+        self._pending: zigpy.util.Requests = zigpy.util.Requests()
+        self._relays: Optional[List[NWK]] = None
+        self._skip_configuration: bool = False
 
     @property
     def initializing(self) -> bool:
