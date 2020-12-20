@@ -5,7 +5,6 @@ import logging
 import time
 from typing import Callable, Dict, List, Optional, Union
 
-import zigpy.application.state as app_state
 from zigpy.const import (
     SIG_ENDPOINTS,
     SIG_EP_INPUT,
@@ -19,6 +18,7 @@ from zigpy.const import (
 import zigpy.endpoint
 import zigpy.exceptions
 import zigpy.neighbor
+import zigpy.state as app_state
 from zigpy.types import EUI64, NWK, Addressing, BroadcastAddress, Relays
 from zigpy.typing import ControllerApplicationType, ZDOType
 import zigpy.util
