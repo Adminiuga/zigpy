@@ -248,6 +248,12 @@ class Device(zigpy.util.LocalLogMixin, zigpy.util.ListenableMixin):
         ] = None,
     ):
         self.last_seen = time.time()
+        if dst_addressing and dst_addressing.addr_mode == Addressing.AddrMode.Group:
+            cnt_prefix = "rx_multicast"
+        else:
+            cnt_prefix = "rx"
+        cnt_suffix = f"_{src_ep:02x}_{cluster:04x}"
+
         try:
             hdr, args = self.deserialize(src_ep, cluster, message)
         except ValueError as e:
@@ -257,6 +263,8 @@ class Device(zigpy.util.LocalLogMixin, zigpy.util.ListenableMixin):
                 cluster,
                 e,
             )
+            name = cnt_prefix + "_deserialize_failure" + cnt_suffix
+            self.counters[name].increment()
             return
         except KeyError as e:
             LOGGER.debug(
@@ -268,12 +276,13 @@ class Device(zigpy.util.LocalLogMixin, zigpy.util.ListenableMixin):
                 cluster,
                 e,
             )
+            name = cnt_prefix + "_unknown_ep_or_cluster" + cnt_suffix
+            self.counters[name].increment()
             return
 
         if hdr.tsn in self._pending and hdr.is_reply:
             try:
                 self._pending[hdr.tsn].result.set_result(args)
-                return
             except asyncio.InvalidStateError:
                 self.debug(
                     (
@@ -282,7 +291,12 @@ class Device(zigpy.util.LocalLogMixin, zigpy.util.ListenableMixin):
                     ),
                     hdr.tsn,
                 )
+            else:
+                self.counters[cnt_prefix + "_reply" + cnt_suffix].increment()
+            finally:
                 return
+
+        self.counters[cnt_prefix + cnt_suffix].increment()
         endpoint = self.endpoints[src_ep]
         return endpoint.handle_message(
             profile, cluster, hdr, args, dst_addressing=dst_addressing
