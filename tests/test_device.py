@@ -170,11 +170,19 @@ async def test_handle_message_reply(dev):
     assert req_mock.result.set_result.call_count == 1
 
 
-async def test_handle_message_deserialize_error(dev):
+@pytest.mark.parametrize(
+    "dst_addressing",
+    (
+        t.Addressing.group(0x1234),
+        t.Addressing.ieee(t.EUI64([1] * 8), 1),
+        t.Addressing.nwk(0x1234, 1),
+    ),
+)
+async def test_handle_message_deserialize_error(dev, dst_addressing):
     ep = dev.add_endpoint(3)
     dev.deserialize = MagicMock(side_effect=ValueError)
     ep.handle_message = MagicMock()
-    dev.handle_message(99, 98, 3, 3, b"abcd")
+    dev.handle_message(99, 98, 3, 3, b"abcd", dst_addressing=dst_addressing)
     assert ep.handle_message.call_count == 0
 
 
