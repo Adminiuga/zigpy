@@ -18,7 +18,7 @@ from zigpy.const import (
 import zigpy.endpoint
 import zigpy.exceptions
 import zigpy.neighbor
-import zigpy.state as app_state
+from zigpy.state import Counters
 from zigpy.types import EUI64, NWK, Addressing, BroadcastAddress, Relays
 from zigpy.typing import ControllerApplicationType, ZDOType
 import zigpy.util
@@ -28,6 +28,8 @@ import zigpy.zdo as zdo
 APS_REPLY_TIMEOUT = 5
 APS_REPLY_TIMEOUT_EXTENDED = 28
 LOGGER = logging.getLogger(__name__)
+MESSAGE_TYPE = {"rx", "rx_multicast"}
+COUNTER_TYPE = {"_deserialize_failure", "_unknown_ep_or_cluster", "_reply", ""}
 
 
 class Status(enum.IntEnum):
@@ -57,11 +59,12 @@ class Device(zigpy.util.LocalLogMixin, zigpy.util.ListenableMixin):
         self.endpoints: Dict[int, Union[zdo.ZDO, zigpy.endpoint.Endpoint]] = {
             0: self.zdo
         }
-        counters_id = f"device_{str(ieee)}"
-        self.counters: app_state.Counters = app_state.Counters(
-            counters_id, auto_create=True
-        )
-        application.state.counters[counters_id] = self.counters
+        self.counters: Dict[str, Counters] = {}
+        for msg_type in MESSAGE_TYPE:
+            for cnt_type in COUNTER_TYPE:
+                counters = Counters(f"{msg_type}{cnt_type}", auto_create=True)
+                self.counters[counters.name] = counters
+        application.state.device_counters[str(ieee)] = self.counters
         self.lqi: Optional[int] = None
         self.rssi: Optional[int] = None
         self.last_seen: Optional[float] = None
@@ -252,8 +255,8 @@ class Device(zigpy.util.LocalLogMixin, zigpy.util.ListenableMixin):
             cnt_prefix = "rx_multicast"
         else:
             cnt_prefix = "rx"
-        suffix_ep_cl = f"_{src_ep:02x}_{cluster:04x}"
-        suffix_ep = suffix_ep_cl[:3]
+        suffix_ep_cl = f"{src_ep:02x}_{cluster:04x}"
+        suffix_ep = suffix_ep_cl[:2]
 
         try:
             hdr, args = self.deserialize(src_ep, cluster, message)
@@ -265,8 +268,8 @@ class Device(zigpy.util.LocalLogMixin, zigpy.util.ListenableMixin):
                 e,
             )
             name = cnt_prefix + "_deserialize_failure"
-            for suffix in ("", suffix_ep, suffix_ep_cl):
-                self.counters[name + suffix].increment()
+            for cnt_name in ("", suffix_ep, suffix_ep_cl):
+                self.counters[name][cnt_name].increment()
             return
         except KeyError as e:
             LOGGER.debug(
@@ -279,8 +282,8 @@ class Device(zigpy.util.LocalLogMixin, zigpy.util.ListenableMixin):
                 e,
             )
             name = cnt_prefix + "_unknown_ep_or_cluster"
-            for suffix in ("", suffix_ep, suffix_ep_cl):
-                self.counters[name + suffix].increment()
+            for cnt_name in ("total", suffix_ep, suffix_ep_cl):
+                self.counters[name][cnt_name].increment()
             return
 
         if hdr.tsn in self._pending and hdr.is_reply:
@@ -296,13 +299,13 @@ class Device(zigpy.util.LocalLogMixin, zigpy.util.ListenableMixin):
                 )
             else:
                 name = cnt_prefix + "_reply"
-                for suffix in ("", suffix_ep, suffix_ep_cl):
-                    self.counters[name + suffix].increment()
+                for cnt_name in ("total", suffix_ep, suffix_ep_cl):
+                    self.counters[name][cnt_name].increment()
             finally:
                 return
 
-        for suffix in ("", suffix_ep, suffix_ep_cl):
-            self.counters[cnt_prefix + suffix].increment()
+        for cnt_name in ("total", suffix_ep, suffix_ep_cl):
+            self.counters[cnt_prefix][cnt_name].increment()
 
         endpoint = self.endpoints[src_ep]
         return endpoint.handle_message(
