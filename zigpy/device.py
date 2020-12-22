@@ -18,7 +18,7 @@ from zigpy.const import (
 import zigpy.endpoint
 import zigpy.exceptions
 import zigpy.neighbor
-from zigpy.state import Counters
+from zigpy.state import CounterGroup
 from zigpy.types import EUI64, NWK, Addressing, BroadcastAddress, Relays
 from zigpy.typing import ControllerApplicationType, ZDOType
 import zigpy.util
@@ -28,8 +28,6 @@ import zigpy.zdo as zdo
 APS_REPLY_TIMEOUT = 5
 APS_REPLY_TIMEOUT_EXTENDED = 28
 LOGGER = logging.getLogger(__name__)
-MESSAGE_TYPE = {"rx", "rx_multicast"}
-COUNTER_TYPE = {"_deserialize_failure", "_unknown_ep_or_cluster", "_reply", ""}
 
 
 class Status(enum.IntEnum):
@@ -59,12 +57,9 @@ class Device(zigpy.util.LocalLogMixin, zigpy.util.ListenableMixin):
         self.endpoints: Dict[int, Union[zdo.ZDO, zigpy.endpoint.Endpoint]] = {
             0: self.zdo
         }
-        self.counters: Dict[str, Counters] = {}
-        for msg_type in MESSAGE_TYPE:
-            for cnt_type in COUNTER_TYPE:
-                counters = Counters(f"{msg_type}{cnt_type}", auto_create=True)
-                self.counters[counters.name] = counters
-        application.state.device_counters[str(ieee)] = self.counters
+        self.counters: Dict[str, CounterGroup] = application.state.device_counters[
+            str(ieee)
+        ]
         self.lqi: Optional[int] = None
         self.rssi: Optional[int] = None
         self.last_seen: Optional[float] = None
