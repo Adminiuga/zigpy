@@ -3,7 +3,7 @@ import binascii
 import enum
 import logging
 import time
-from typing import Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from zigpy.const import (
     SIG_ENDPOINTS,
@@ -18,7 +18,7 @@ from zigpy.const import (
 import zigpy.endpoint
 import zigpy.exceptions
 import zigpy.neighbor
-from zigpy.state import CounterGroup
+from zigpy.state import CounterGroups
 from zigpy.types import EUI64, NWK, Addressing, BroadcastAddress, Relays
 from zigpy.typing import ControllerApplicationType, ZDOType
 import zigpy.util
@@ -57,9 +57,7 @@ class Device(zigpy.util.LocalLogMixin, zigpy.util.ListenableMixin):
         self.endpoints: Dict[int, Union[zdo.ZDO, zigpy.endpoint.Endpoint]] = {
             0: self.zdo
         }
-        self.counters: Dict[str, CounterGroup] = application.state.device_counters[
-            str(ieee)
-        ]
+        self.counters: CounterGroups = application.state.device_counters[str(ieee)]
         self.lqi: Optional[int] = None
         self.rssi: Optional[int] = None
         self.last_seen: Optional[float] = None
@@ -230,7 +228,9 @@ class Device(zigpy.util.LocalLogMixin, zigpy.util.ListenableMixin):
 
         return result
 
-    def deserialize(self, endpoint_id, cluster_id, data):
+    def deserialize(
+        self, endpoint_id: int, cluster_id: int, data: bytes
+    ) -> Tuple[Union[foundation.ZCLHeader, zdo.types.ZDOHeader], List[Any]]:
         return self.endpoints[endpoint_id].deserialize(cluster_id, data)
 
     def handle_message(
@@ -280,6 +280,16 @@ class Device(zigpy.util.LocalLogMixin, zigpy.util.ListenableMixin):
             for cnt_name in ("total", suffix_ep, suffix_ep_cl):
                 self.counters[name][cnt_name].increment()
             return
+
+        if src_ep:
+            if hdr.frame_control.is_general:
+                cnt_type = f"{cnt_prefix}_{hdr.command_id.name}"
+                for name in ("", suffix_ep, suffix_ep_cl):
+                    self.counters[cnt_type][name].increment()
+            else:
+                cnt_type = f"{cnt_prefix}_cluster_command"
+                for name in ("", suffix_ep, suffix_ep_cl):
+                    self.counters[cnt_type][name].increment()
 
         if hdr.tsn in self._pending and hdr.is_reply:
             try:
