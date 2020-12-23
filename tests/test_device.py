@@ -129,6 +129,10 @@ async def test_handle_message(dev):
     dev.handle_message(99, 98, 3, 3, b"abcd")
     assert ep.handle_message.call_count == 1
 
+    hdr.frame_control.is_general = False
+    dev.handle_message(99, 98, 3, 3, b"abcd")
+    assert ep.handle_message.call_count == 2
+
 
 async def test_handle_message_reply(dev):
     ep = dev.add_endpoint(3)
