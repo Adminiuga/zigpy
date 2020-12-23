@@ -18,7 +18,7 @@ from zigpy.const import (
 import zigpy.endpoint
 import zigpy.exceptions
 import zigpy.neighbor
-from zigpy.state import CounterGroups
+from zigpy.state import CounterGroup
 from zigpy.types import EUI64, NWK, Addressing, BroadcastAddress, Relays
 from zigpy.typing import ControllerApplicationType, ZDOType
 import zigpy.util
@@ -27,6 +27,11 @@ import zigpy.zdo as zdo
 
 APS_REPLY_TIMEOUT = 5
 APS_REPLY_TIMEOUT_EXTENDED = 28
+COUNTER_CLUSTER_CMD = "cluster_command"
+COUNTER_DESER_ERR = "deserialize_error"
+COUNTER_REPLY = "reply"
+COUNTER_UNK_EP = "unknwon_ep_or_cluster"
+COUNTER_UNSOLICITED = "unsolicited"
 LOGGER = logging.getLogger(__name__)
 
 
@@ -57,7 +62,7 @@ class Device(zigpy.util.LocalLogMixin, zigpy.util.ListenableMixin):
         self.endpoints: Dict[int, Union[zdo.ZDO, zigpy.endpoint.Endpoint]] = {
             0: self.zdo
         }
-        self.counters: CounterGroups = application.state.device_counters[str(ieee)]
+        self.counters: CounterGroup = application.state.device_counters[str(ieee)]
         self.lqi: Optional[int] = None
         self.rssi: Optional[int] = None
         self.last_seen: Optional[float] = None
@@ -250,8 +255,7 @@ class Device(zigpy.util.LocalLogMixin, zigpy.util.ListenableMixin):
             cnt_prefix = "rx_multicast"
         else:
             cnt_prefix = "rx"
-        suffix_ep_cl = f"{src_ep:02x}_{cluster:04x}"
-        suffix_ep = suffix_ep_cl[:2]
+        cnt_ep = src_ep if src_ep else "zdo"
 
         try:
             hdr, args = self.deserialize(src_ep, cluster, message)
@@ -262,9 +266,7 @@ class Device(zigpy.util.LocalLogMixin, zigpy.util.ListenableMixin):
                 cluster,
                 e,
             )
-            name = cnt_prefix + "_deserialize_failure"
-            for cnt_name in ("", suffix_ep, suffix_ep_cl):
-                self.counters[name][cnt_name].increment()
+            self.counters.increment(COUNTER_DESER_ERR, cnt_prefix, cnt_ep, cluster)
             return
         except KeyError as e:
             LOGGER.debug(
@@ -276,20 +278,13 @@ class Device(zigpy.util.LocalLogMixin, zigpy.util.ListenableMixin):
                 cluster,
                 e,
             )
-            name = cnt_prefix + "_unknown_ep_or_cluster"
-            for cnt_name in ("total", suffix_ep, suffix_ep_cl):
-                self.counters[name][cnt_name].increment()
+            self.counters.increment(COUNTER_UNK_EP, cnt_prefix, cnt_ep, cluster)
             return
 
-        if src_ep:
-            if hdr.frame_control.is_general:
-                cnt_type = f"{cnt_prefix}_{hdr.command_id.name}"
-                for name in ("", suffix_ep, suffix_ep_cl):
-                    self.counters[cnt_type][name].increment()
-            else:
-                cnt_type = f"{cnt_prefix}_cluster_command"
-                for name in ("", suffix_ep, suffix_ep_cl):
-                    self.counters[cnt_type][name].increment()
+        if src_ep and hdr.frame_control.is_cluster:
+            self.counters.increment(COUNTER_CLUSTER_CMD, cnt_prefix, cnt_ep, cluster)
+        else:
+            self.counters.increment(hdr.command_id.name, cnt_prefix, cnt_ep, cluster)
 
         if hdr.tsn in self._pending and hdr.is_reply:
             try:
@@ -303,14 +298,11 @@ class Device(zigpy.util.LocalLogMixin, zigpy.util.ListenableMixin):
                     hdr.tsn,
                 )
             else:
-                name = cnt_prefix + "_reply"
-                for cnt_name in ("total", suffix_ep, suffix_ep_cl):
-                    self.counters[name][cnt_name].increment()
+                self.counters.increment(COUNTER_REPLY, cnt_prefix, cnt_ep, cluster)
             finally:
                 return
 
-        for cnt_name in ("total", suffix_ep, suffix_ep_cl):
-            self.counters[cnt_prefix][cnt_name].increment()
+        self.counters.increment(COUNTER_UNSOLICITED, cnt_prefix, cnt_ep, cluster)
 
         endpoint = self.endpoints[src_ep]
         return endpoint.handle_message(
