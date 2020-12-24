@@ -251,10 +251,12 @@ class Device(zigpy.util.LocalLogMixin, zigpy.util.ListenableMixin):
         ] = None,
     ):
         self.last_seen = time.time()
-        if dst_addressing and dst_addressing.addr_mode == Addressing.AddrMode.Group:
-            cnt_prefix = "rx_multicast"
-        else:
-            cnt_prefix = "rx"
+        cnt_prefix = "rx"  # default one
+        if dst_addressing and dst_addressing.addr_mode != Addressing.AddrMode.IEEE:
+            if dst_addressing.addr_mode == Addressing.AddrMode.Group:
+                cnt_prefix = "rx_multicast"
+            elif dst_addressing.addr in (0xFFFD, 0xFFFE, 0xFFFF):
+                cnt_prefix = "rx_broadcast"
         cnt_ep = src_ep if src_ep else "zdo"
 
         try:
